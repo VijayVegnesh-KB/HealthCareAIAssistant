@@ -11,7 +11,8 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   List<Map<String, dynamic>> _messages = [];
   TextEditingController _controller = TextEditingController();
   FocusNode _focusNode = FocusNode();
-  final String _apiUrl = 'http://localhost:8000/recommendation/';
+  final String _apiUrl = 'http://127.0.0.1:5000/recommendation/';
+
 
   @override
   void dispose() {
@@ -31,6 +32,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'message': message}),
       );
+
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
