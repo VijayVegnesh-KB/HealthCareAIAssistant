@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class CheckoutScreen extends StatefulWidget {
   @override
@@ -10,34 +12,72 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String _name = '';
   String _address = '';
   String _creditCardNumber = '';
-  int _orderNumber = 0;
 
-  void _submitOrder() {
+  void _submitOrder(Map<String, dynamic> medicine) async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
 
-      // Generate a mock order number
-      setState(() {
-        _orderNumber = DateTime.now().millisecondsSinceEpoch;
-      });
+      // Prepare order data
+      final orderData = {
+        "name": _name,
+        "address": _address,
+        "creditCardNumber": _creditCardNumber,
+        "medicine": {
+          "name": medicine['name'],
+          "price": medicine['price'],
+          "image": medicine['image'],
+        },
+      };
 
-      // Navigate to order confirmation page
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OrderConfirmationScreen(
-            name: _name,
-            address: _address,
-            creditCardNumber: _creditCardNumber,
-            orderNumber: _orderNumber,
-          ),
-        ),
-      );
+      try {
+        // Send order data to the backend
+        final response = await http.post(
+          Uri.parse("http://localhost:5000/submit_order/"),
+          headers: {"Content-Type": "application/json"},
+          body: json.encode(orderData),
+        );
+
+        if (response.statusCode == 201) {
+          final responseData = json.decode(response.body);
+          final orderNumber = responseData['orderNumber'];
+
+          // Navigate to the Order Confirmation Screen
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OrderConfirmationScreen(
+                name: _name,
+                address: _address,
+                creditCardNumber: _creditCardNumber,
+                orderNumber: int.parse(orderNumber),
+              ),
+            ),
+          );
+        } else {
+          // Handle errors
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text("Error"),
+              content: Text("Failed to submit the order. Please try again."),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("OK"),
+                ),
+              ],
+            ),
+          );
+        }
+      } catch (e) {
+        print("Error submitting order: $e");
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Get medicine data passed via arguments
     final medicine = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
 
     return Scaffold(
@@ -123,7 +163,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: _submitOrder,
+                    onPressed: () => _submitOrder(medicine),
                     child: Text('Submit Order'),
                   ),
                 ],
@@ -166,7 +206,7 @@ class OrderConfirmationScreen extends StatelessWidget {
             SizedBox(height: 10),
             Text('Shipping to: $address'),
             SizedBox(height: 10),
-            Text('Payment made with card ending in: ${creditCardNumber.substring(12)}'),  // Display last 4 digits
+            Text('Payment made with card ending in: ${creditCardNumber.substring(12)}'), // Display last 4 digits
             SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {

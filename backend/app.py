@@ -8,6 +8,8 @@ from autogen.retrieve_utils import TEXT_FORMATS
 import xml.etree.ElementTree as ET  # Import for parsing XML
 import json
 import chromadb
+from pymongo import MongoClient
+from datetime import datetime
 
 # Check if the XML file is accessible
 if os.path.exists("../ProductCatelog.xml"):
@@ -46,6 +48,19 @@ classifier = AssistantAgent(
         "config_list": config_list,
     },
 )
+
+# Department classifier for medical queries
+department_classifier = AssistantAgent(
+    name="department_classifier",
+    system_message="Classify the medical query into one of the following departments: 'Cardiology', 'Neurology', 'Dermatology', 'Orthopedics', 'General'. "
+                   "Respond with JSON in the form {'department': 'Cardiology'}",
+    llm_config={
+        "timeout": 600,
+        "cache_seed": 42,
+        "config_list": config_list,
+    },
+)
+
 
 corpus_file = "../ProductCatelog.xml"
 
@@ -106,6 +121,31 @@ def classify_intent(user_input):
     
     return classification
 
+
+# Classify medical queries into departments
+def classify_department(user_input):
+    department_prompt = (
+        f"Classify the following medical query into a department:\n\n"
+        f"Input: {user_input}\n"
+        "Please provide the department classification in the format {'department': 'Cardiology'}."
+    )
+
+    department_response = healthassistant.initiate_chat(
+        department_classifier, message=department_prompt, max_turns=1, summary_method="last_msg"
+    )
+    
+    summary = department_response.summary
+    clean_response = summary.strip().strip("```json").strip("```")
+    
+    try:
+        response_json = json.loads(clean_response)
+        classification = response_json.get("department", "").lower()
+    except json.JSONDecodeError:
+        department = "General"
+    
+    return department
+
+
 def handle_user_query(user_input):
     print("XYZ ")
     print(f"user_input: {user_input}")
@@ -116,6 +156,9 @@ def handle_user_query(user_input):
         return {"message": "Hello! How can I assist you today with your health concerns?"}
 
     if intent == "medical":
+        department = classify_department(user_input)
+        print(f"Classified department: {department}")
+    
         chat_result = ragproxyagent.initiate_chat(
             healthassistant, message=ragproxyagent.message_generator, problem=user_input, n_results=5
         )
@@ -145,6 +188,43 @@ def get_recommendation():
     except Exception as e:
         print(f"Error occurred: {e}")
         return jsonify({"error": "Internal Server Error"}), 500
+    
+
+# Connect to MongoDB
+mongo_client = MongoClient("mongodb://localhost:27017/")  # Replace with your MongoDB URI
+db = mongo_client["HealthcareAssistant"]  # Database name
+orders_collection = db["orders"]  # Collection name
+
+@app.route("/submit_order/", methods=["POST"])
+def submit_order():
+    try:
+        data = request.get_json()
+
+        # Ensure all required fields are present
+        required_fields = ["name", "address", "creditCardNumber", "medicine"]
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing field: {field}"}), 400
+
+        # Prepare order document
+        order_document = {
+            "name": data["name"],
+            "address": data["address"],
+            "creditCardNumber": data["creditCardNumber"][-4:],  # Store only last 4 digits for security
+            "medicine": data["medicine"],  # Includes name, price, and image details
+            "orderNumber": datetime.now().strftime("%Y%m%d%H%M%S"),  # Generate a timestamp-based order number
+            "timestamp": datetime.now(),  # Add a timestamp
+        }
+
+        # Insert order into MongoDB
+        orders_collection.insert_one(order_document)
+
+        return jsonify({"message": "Order submitted successfully", "orderNumber": order_document["orderNumber"]}), 201
+
+    except Exception as e:
+        print(f"Error occurred: {e}")
+        return jsonify({"error": "Internal Server Error"}), 500
+
 
 # To run this backend, use the following command:
 # python app.py

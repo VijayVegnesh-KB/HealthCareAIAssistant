@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:xml/xml.dart' as xml;
+import 'checkout_screen.dart';
 
 class MedicalProductsScreen extends StatefulWidget {
   @override
@@ -118,9 +119,18 @@ class _MedicalProductsScreenState extends State<MedicalProductsScreen> {
                         SizedBox(height: 10),
                         ElevatedButton(
                           onPressed: () {
-                            // Add to cart functionality can be added here
+                            // Navigate to CheckoutScreen and pass the product details
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => CheckoutScreen(),
+                                settings: RouteSettings(
+                                  arguments: product, // Passing product details
+                                ),
+                              ),
+                            );
                           },
-                          child: Text('Add to Cart'),
+                          child: Text('Buy'),
                         ),
                       ],
                     ),
